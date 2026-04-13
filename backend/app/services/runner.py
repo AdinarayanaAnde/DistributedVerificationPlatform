@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 TEST_ROOT = BASE_DIR / "tests"
-REPORTS_DIR = BASE_DIR / "reports"
+REPORTS_DIR = BASE_DIR.parent / "reports"  # Project root/reports
 
 # Maximum time (seconds) a single pytest process is allowed to run
 PROCESS_TIMEOUT = int(os.getenv("PYTEST_TIMEOUT", "3600"))  # 1 hour default

@@ -11,6 +11,12 @@ venv/
 *.sqlite
 *.egg-info/
 .coverage
+.pytest_cache/
+
+# Generated artifacts
+reports/
+data/
+.sixth/
 
 # Node
 node_modules/
