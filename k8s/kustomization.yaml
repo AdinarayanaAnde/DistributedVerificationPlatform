@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - backend-deployment.yaml
+  - frontend-deployment.yaml
+  - postgres-deployment.yaml
+  - smtp-secret.yaml
+  - ingress.yaml
+
+images:
+  - name: dvf-backend
+    newTag: latest
+  - name: dvf-frontend
+    newTag: latest
