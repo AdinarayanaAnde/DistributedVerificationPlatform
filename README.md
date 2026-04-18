@@ -206,6 +206,57 @@ Dependency updates are automated with GitHub Dependabot using `.github/dependabo
    npm run dev -- --host 0.0.0.0 --port 5173
    ```
 
+### HTTPS / SSL Certificates (Optional)
+
+The Vite dev server automatically serves **HTTPS** when cert files exist at `certs/cert.pem` and `certs/key.pem` in the project root. If no certs are found, it falls back to plain HTTP.
+
+> **Symptom**: `ERR_SSL_PROTOCOL_ERROR` when accessing via LAN IP (e.g. `https://192.168.1.6:5173`).
+> **Cause**: Either no certs exist, or the certificate's Subject Alternative Names (SANs) don't include your IP.
+
+**Generate a self-signed dev certificate (Windows PowerShell):**
+
+```powershell
+# 1. Create a cert with SANs for localhost + your LAN IP
+$cert = New-SelfSignedCertificate `
+    -Subject "CN=DVP Dev" `
+    -TextExtension @("2.5.29.17={text}DNS=localhost&IPAddress=192.168.1.6&IPAddress=127.0.0.1") `
+    -CertStoreLocation "Cert:\CurrentUser\My" `
+    -NotAfter (Get-Date).AddYears(2) `
+    -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 `
+    -KeyExportPolicy Exportable
+
+# 2. Export as PFX (temporary)
+$pwd = ConvertTo-SecureString -String "temp" -Force -AsPlainText
+Export-PfxCertificate -Cert $cert -FilePath certs/temp.pfx -Password $pwd | Out-Null
+
+# 3. Convert PFX → PEM using Python (cryptography is in backend deps)
+cd backend
+.venv/Scripts/python -c "
+from cryptography.hazmat.primitives.serialization import pkcs12, Encoding, PrivateFormat, NoEncryption
+from pathlib import Path
+pfx = Path('../certs/temp.pfx').read_bytes()
+key, cert, _ = pkcs12.load_key_and_certificates(pfx, b'temp')
+Path('../certs/key.pem').write_bytes(key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()))
+Path('../certs/cert.pem').write_bytes(cert.public_bytes(Encoding.PEM))
+Path('../certs/temp.pfx').unlink()
+print('Done — certs/cert.pem + certs/key.pem written')
+"
+
+# 4. Clean up cert from Windows store
+Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)"
+```
+
+**Generate using OpenSSL (Linux/macOS):**
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -days 730 \
+  -keyout certs/key.pem -out certs/cert.pem \
+  -subj "/CN=DVP Dev" \
+  -addext "subjectAltName=DNS:localhost,IP:192.168.1.6,IP:127.0.0.1"
+```
+
+> **Note**: Replace `192.168.1.6` with your actual LAN IP. Certs are gitignored — each developer generates their own. On first browser visit, accept the self-signed cert warning (Advanced → Proceed).
+
 ### Using Docker Compose
 
 ```powershell
