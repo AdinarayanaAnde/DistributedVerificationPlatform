@@ -24,20 +24,20 @@ function Write-Warn($msg) { Write-Host "   $msg" -ForegroundColor Yellow }
 Write-Step "Checking prerequisites"
 
 $python = Get-Command python -ErrorAction SilentlyContinue
-if (-not $python) { throw "Python not found. Install Python 3.11+ from https://python.org" }
+if (-not $python) { throw "Python not found. Install Python 3.11+ from https://www.python.org/downloads/" }
 $pyVer = (python --version 2>&1) -replace 'Python ',''
 $pyMajor, $pyMinor = $pyVer.Split('.')[0..1] | ForEach-Object { [int]$_ }
 if ($pyMajor -lt 3 -or ($pyMajor -eq 3 -and $pyMinor -lt 11)) {
-    throw "Python 3.11+ required (found $pyVer)"
+    throw "Python 3.11+ required (found $pyVer). Download from https://www.python.org/downloads/"
 }
 Write-Ok "Python $pyVer"
 
 if (-not $SkipFrontend) {
     $node = Get-Command node -ErrorAction SilentlyContinue
-    if (-not $node) { throw "Node.js not found. Install Node.js 18+ from https://nodejs.org" }
+    if (-not $node) { throw "Node.js not found. Install Node.js 18+ from https://nodejs.org/en/download/" }
     $nodeVer = (node --version) -replace 'v',''
     $nodeMajor = [int]($nodeVer.Split('.')[0])
-    if ($nodeMajor -lt 18) { throw "Node.js 18+ required (found $nodeVer)" }
+    if ($nodeMajor -lt 18) { throw "Node.js 18+ required (found $nodeVer). Download from https://nodejs.org/en/download/" }
     Write-Ok "Node.js $nodeVer"
 }
 

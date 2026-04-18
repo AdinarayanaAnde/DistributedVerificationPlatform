@@ -24,24 +24,24 @@ warn()  { printf '   \033[33m%s\033[0m\n' "$1"; }
 step "Checking prerequisites"
 
 if ! command -v python3 &>/dev/null; then
-    echo "ERROR: Python 3 not found. Install Python 3.11+ first." >&2; exit 1
+    echo "ERROR: Python 3 not found. Install Python 3.11+ from https://www.python.org/downloads/" >&2; exit 1
 fi
 PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 PY_MAJOR=$(echo "$PY_VER" | cut -d. -f1)
 PY_MINOR=$(echo "$PY_VER" | cut -d. -f2)
 if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 11 ]; }; then
-    echo "ERROR: Python 3.11+ required (found $PY_VER)" >&2; exit 1
+    echo "ERROR: Python 3.11+ required (found $PY_VER). Download from https://www.python.org/downloads/" >&2; exit 1
 fi
 ok "Python $PY_VER"
 
 if [ "$SKIP_FRONTEND" = false ]; then
     if ! command -v node &>/dev/null; then
-        echo "ERROR: Node.js not found. Install Node.js 18+ first." >&2; exit 1
+        echo "ERROR: Node.js not found. Install Node.js 18+ from https://nodejs.org/en/download/" >&2; exit 1
     fi
     NODE_VER=$(node --version | tr -d 'v')
     NODE_MAJOR=$(echo "$NODE_VER" | cut -d. -f1)
     if [ "$NODE_MAJOR" -lt 18 ]; then
-        echo "ERROR: Node.js 18+ required (found $NODE_VER)" >&2; exit 1
+        echo "ERROR: Node.js 18+ required (found $NODE_VER). Download from https://nodejs.org/en/download/" >&2; exit 1
     fi
     ok "Node.js $NODE_VER"
 fi
