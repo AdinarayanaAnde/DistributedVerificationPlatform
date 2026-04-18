@@ -120,12 +120,14 @@ if (-not $SkipCerts) {
 from cryptography.hazmat.primitives.serialization import pkcs12, Encoding, PrivateFormat, NoEncryption
 from pathlib import Path
 pfx = Path("certs/temp.pfx").read_bytes()
-key, cert, _ = pkcs12.load_key_and_certificates(pfx, b"dvp-tmp")
+key, crt, _ = pkcs12.load_key_and_certificates(pfx, b"dvp-tmp")
 Path("certs/key.pem").write_bytes(key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()))
-Path("certs/cert.pem").write_bytes(cert.public_bytes(Encoding.PEM))
+Path("certs/cert.pem").write_bytes(crt.public_bytes(Encoding.PEM))
 Path("certs/temp.pfx").unlink()
 '@
-        & backend\.venv\Scripts\python -c $pyScript
+        Set-Content "certs\_convert.py" -Value $pyScript
+        & backend\.venv\Scripts\python "certs\_convert.py"
+        Remove-Item "certs\_convert.py" -ErrorAction SilentlyContinue
 
         Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -ErrorAction SilentlyContinue
         Write-Ok "HTTPS certs created for localhost + $lanIp (valid 2 years)"
