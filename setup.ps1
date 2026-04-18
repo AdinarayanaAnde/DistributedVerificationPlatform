@@ -101,7 +101,7 @@ if (-not $SkipCerts) {
         } | Select-Object -First 1).IPAddress
         if (-not $lanIp) { $lanIp = "127.0.0.1" }
 
-        $san = "2.5.29.17={text}DNS=localhost&IPAddress=$lanIp&IPAddress=127.0.0.1"
+        $san = '2.5.29.17={text}DNS=localhost&IPAddress=' + $lanIp + '&IPAddress=127.0.0.1'
         $cert = New-SelfSignedCertificate `
             -Subject "CN=DVP Dev" `
             -TextExtension @($san) `
@@ -114,15 +114,16 @@ if (-not $SkipCerts) {
         $pwd = ConvertTo-SecureString -String "dvp-tmp" -Force -AsPlainText
         Export-PfxCertificate -Cert $cert -FilePath "certs\temp.pfx" -Password $pwd | Out-Null
 
-        & backend\.venv\Scripts\python -c @"
+        $pyScript = @'
 from cryptography.hazmat.primitives.serialization import pkcs12, Encoding, PrivateFormat, NoEncryption
 from pathlib import Path
-pfx = Path('certs/temp.pfx').read_bytes()
-key, cert, _ = pkcs12.load_key_and_certificates(pfx, b'dvp-tmp')
-Path('certs/key.pem').write_bytes(key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()))
-Path('certs/cert.pem').write_bytes(cert.public_bytes(Encoding.PEM))
-Path('certs/temp.pfx').unlink()
-"@
+pfx = Path("certs/temp.pfx").read_bytes()
+key, cert, _ = pkcs12.load_key_and_certificates(pfx, b"dvp-tmp")
+Path("certs/key.pem").write_bytes(key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()))
+Path("certs/cert.pem").write_bytes(cert.public_bytes(Encoding.PEM))
+Path("certs/temp.pfx").unlink()
+'@
+        & backend\.venv\Scripts\python -c $pyScript
 
         Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -ErrorAction SilentlyContinue
         Write-Ok "HTTPS certs created for localhost + $lanIp (valid 2 years)"
