@@ -20,7 +20,7 @@ function Write-Step($msg) { Write-Host "`n>> $msg" -ForegroundColor Cyan }
 function Write-Ok($msg)   { Write-Host "   $msg" -ForegroundColor Green }
 function Write-Warn($msg) { Write-Host "   $msg" -ForegroundColor Yellow }
 
-# ── 1. Check prerequisites ─────────────────────────────────────────────
+# -- 1. Check prerequisites ----------------------------------------------
 Write-Step "Checking prerequisites"
 
 $python = Get-Command python -ErrorAction SilentlyContinue
@@ -41,7 +41,7 @@ if (-not $SkipFrontend) {
     Write-Ok "Node.js $nodeVer"
 }
 
-# ── 2. Backend: venv + dependencies ────────────────────────────────────
+# -- 2. Backend: venv + dependencies -------------------------------------
 Write-Step "Setting up backend"
 
 if (-not (Test-Path "backend\.venv")) {
@@ -55,7 +55,7 @@ if (-not (Test-Path "backend\.venv")) {
 & backend\.venv\Scripts\pip install -e backend --quiet
 Write-Ok "Backend dependencies installed"
 
-# ── 3. Environment file ────────────────────────────────────────────────
+# -- 3. Environment file -------------------------------------------------
 Write-Step "Configuring environment"
 
 if (-not (Test-Path "backend\.env")) {
@@ -66,10 +66,10 @@ if (-not (Test-Path "backend\.env")) {
     Set-Content "backend\.env" -Value $envContent
     Write-Ok "Created backend\.env (SQLite, random SECRET_KEY)"
 } else {
-    Write-Ok "backend\.env already exists — skipping"
+    Write-Ok "backend\.env already exists - skipping"
 }
 
-# ── 4. Data directories ───────────────────────────────────────────────
+# -- 4. Data directories -------------------------------------------------
 Write-Step "Creating data directories"
 
 @("backend\data", "reports") | ForEach-Object {
@@ -77,7 +77,7 @@ Write-Step "Creating data directories"
 }
 Write-Ok "backend\data\ and reports\ ready"
 
-# ── 5. Frontend ────────────────────────────────────────────────────────
+# -- 5. Frontend ---------------------------------------------------------
 if (-not $SkipFrontend) {
     Write-Step "Setting up frontend"
     Push-Location frontend
@@ -86,12 +86,12 @@ if (-not $SkipFrontend) {
     Write-Ok "Frontend dependencies installed"
 }
 
-# ── 6. HTTPS certs (optional) ─────────────────────────────────────────
+# -- 6. HTTPS certs (optional) -------------------------------------------
 if (-not $SkipCerts) {
     Write-Step "Generating HTTPS dev certificates"
 
     if ((Test-Path "certs\cert.pem") -and (Test-Path "certs\key.pem")) {
-        Write-Ok "certs\ already exist — skipping (delete certs\ to regenerate)"
+        Write-Ok "certs\ already exist - skipping (delete certs\ to regenerate)"
     } else {
         if (-not (Test-Path "certs")) { New-Item -ItemType Directory -Path "certs" -Force | Out-Null }
 
@@ -110,7 +110,7 @@ if (-not $SkipCerts) {
             -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 `
             -KeyExportPolicy Exportable
 
-        # Export via PFX → PEM using backend's Python (cryptography is installed)
+        # Export via PFX -> PEM using backend's Python (cryptography is installed)
         $pwd = ConvertTo-SecureString -String "dvp-tmp" -Force -AsPlainText
         Export-PfxCertificate -Cert $cert -FilePath "certs\temp.pfx" -Password $pwd | Out-Null
 
@@ -132,7 +132,7 @@ Path("certs/temp.pfx").unlink()
     Write-Warn "Skipping HTTPS certs (use plain HTTP or run setup.ps1 without -SkipCerts later)"
 }
 
-# ── 7. Summary ─────────────────────────────────────────────────────────
+# -- 7. Summary ----------------------------------------------------------
 Write-Host "`n" -NoNewline
 Write-Host "=" * 60 -ForegroundColor Green
 Write-Host "  Setup complete! Start the platform:" -ForegroundColor Green
