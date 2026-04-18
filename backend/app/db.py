@@ -40,3 +40,55 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Auto-migrate: add new columns to existing tables if missing
+        await _add_column_if_missing(conn, "runs", "run_name", "VARCHAR(64)")
+        await _add_column_if_missing(conn, "runs", "setup_config_id", "INTEGER")
+        await _add_column_if_missing(conn, "runs", "setup_status", "VARCHAR(32)")
+        await _add_column_if_missing(conn, "runs", "teardown_config_id", "INTEGER")
+        await _add_column_if_missing(conn, "runs", "teardown_status", "VARCHAR(32)")
+        # Backfill run_name for existing runs that don't have one
+        await _backfill_run_names(conn)
+
+
+async def _add_column_if_missing(conn, table: str, column: str, col_type: str) -> None:
+    """Safely add a column to an existing table (SQLite compatible)."""
+    import sqlalchemy
+    try:
+        result = await conn.execute(sqlalchemy.text(f"PRAGMA table_info({table})"))
+        columns = [row[1] for row in result.fetchall()]
+        if column not in columns:
+            await conn.execute(sqlalchemy.text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+    except Exception:
+        pass  # Non-SQLite or column already exists
+
+
+async def _backfill_run_names(conn) -> None:
+    """Assign run_name (RUN-YYYYMMDD-NNN) to any existing runs that lack one."""
+    import sqlalchemy
+    from collections import Counter
+    try:
+        result = await conn.execute(
+            sqlalchemy.text("SELECT id, created_at FROM runs WHERE run_name IS NULL ORDER BY created_at, id")
+        )
+        rows = result.fetchall()
+        if not rows:
+            return
+        day_counter: Counter = Counter()
+        for run_id, created_at in rows:
+            if created_at:
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(str(created_at))
+                    day_key = dt.strftime("%Y%m%d")
+                except Exception:
+                    day_key = "19700101"
+            else:
+                day_key = "19700101"
+            day_counter[day_key] += 1
+            run_name = f"RUN-{day_key}-{day_counter[day_key]:03d}"
+            await conn.execute(
+                sqlalchemy.text("UPDATE runs SET run_name = :name WHERE id = :id"),
+                {"name": run_name, "id": run_id},
+            )
+    except Exception:
+        pass

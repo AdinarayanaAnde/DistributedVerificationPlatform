@@ -35,6 +35,7 @@ If you discover a security vulnerability in Distributed Verification Platform, p
 ### Dependency Management
 - Keep dependencies updated regularly
 - Monitor security advisories for critical vulnerabilities
+- Use GitHub Dependabot to automate dependency updates and patch security issues
 - Run `pip audit` and `npm audit` before releases
 
 ### Environment Configuration

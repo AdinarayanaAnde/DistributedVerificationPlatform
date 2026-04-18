@@ -31,8 +31,9 @@ class NotificationService:
             msg['To'] = client.email
             msg['Subject'] = f"Test Run {run.status.title()} - {client.name}"
 
+            run_display = run.run_name or f"#{run.id}"
             body = f"""
-Test run #{run.id} has {run.status}.
+Test run {run_display} has {run.status}.
 
 Client: {client.name}
 Tests: {', '.join(run.selected_tests)}
@@ -59,6 +60,7 @@ View details: http://localhost:8000/runs/{run.id}
         try:
             payload = {
                 "run_id": run.id,
+                "run_name": run.run_name,
                 "client_name": client.name,
                 "status": run.status,
                 "selected_tests": run.selected_tests,

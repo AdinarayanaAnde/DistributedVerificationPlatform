@@ -998,6 +998,7 @@ body {
   border-radius: var(--radius-sm, 4px);
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
+  text-transform: none;
 }
 .dvp-filter-input:focus,
 .dvp-filter-select:focus {
@@ -1026,6 +1027,104 @@ body {
   color: var(--text-muted);
   font-size: 12px;
   font-style: italic;
+}
+
+/* ── ComboFilter dropdown ── */
+.dvp-combo-caret {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  line-height: 1;
+}
+.dvp-combo-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: var(--shadow-lg, 0 4px 12px rgba(0,0,0,0.2));
+  z-index: 200;
+}
+.dvp-combo-option {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+}
+.dvp-combo-option:hover {
+  background: var(--bg-hover, rgba(99,102,241,0.1));
+}
+.dvp-combo-option--active {
+  background: var(--bg-hover, rgba(99,102,241,0.15));
+  font-weight: 600;
+}
+.dvp-combo-dropdown::-webkit-scrollbar { width: 5px; }
+.dvp-combo-dropdown::-webkit-scrollbar-thumb { background: var(--border-primary); border-radius: 3px; }
+.dvp-combo-check {
+  margin-right: 6px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.dvp-combo-option--active .dvp-combo-check {
+  opacity: 1;
+  color: var(--accent);
+}
+.dvp-combo-option--clear {
+  color: var(--accent);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-primary);
+}
+.dvp-combo-option--empty {
+  color: var(--text-muted);
+  font-style: italic;
+  cursor: default;
+}
+.dvp-combo-display {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 26px);
+  text-transform: none;
+}
+.dvp-combo-clear {
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.dvp-combo-clear:hover {
+  color: var(--accent);
+}
+
+/* ── Clickable table cell ── */
+.dvp-clickable-cell {
+  cursor: pointer;
+}
+.dvp-clickable-cell:hover {
+  text-decoration: underline;
+  color: var(--accent) !important;
 }
 
 /* ── Run Selector Dropdown ── */
@@ -1436,6 +1535,206 @@ body {
   color: var(--text-muted);
   font-weight: 600;
   border: 1px solid var(--border-primary);
+}
+.dvp-suite-tag--clickable {
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.dvp-suite-tag--clickable:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.dvp-suite-tag--active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Suite filters */
+.dvp-suite-filters {
+  padding: 4px 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dvp-suite-filters__row {
+  display: flex;
+  gap: 6px;
+}
+.dvp-suite-source-filter {
+  width: auto;
+  min-width: 100px;
+}
+.dvp-suite-tag-cloud {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Suite card enhancements */
+.dvp-suite-card {
+  position: relative;
+}
+.dvp-suite-card__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.dvp-suite-card__stats {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.dvp-suite-stat {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.dvp-suite-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.dvp-suite-card:hover .dvp-suite-delete {
+  opacity: 1;
+}
+
+/* Suite create form */
+.dvp-suite-create-form {
+  padding: 8px;
+  margin: 0 8px 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dvp-suite-create-form__info {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Suite selection summary */
+.dvp-suite-selection-summary {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  text-align: center;
+  border-top: 1px solid var(--border-primary);
+  background: var(--accent-soft);
+}
+
+/* ═══ SETUP PANEL ═══ */
+.dvp-setup-info {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  border-bottom: 1px solid var(--border-primary);
+}
+.dvp-setup-form {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid var(--border-primary);
+}
+.dvp-setup-steps-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+.dvp-setup-steps-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.dvp-setup-step-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dvp-setup-step-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dvp-setup-step-num {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 20px;
+}
+.dvp-setup-step-actions {
+  display: flex;
+  gap: 2px;
+}
+.dvp-setup-command {
+  width: 100%;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  padding: 4px 6px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  resize: vertical;
+}
+.dvp-setup-step-list {
+  padding: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dvp-setup-step-mini {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+}
+.dvp-setup-step-mini__num {
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 16px;
+}
+.dvp-setup-step-mini__icon {
+  font-size: 12px;
+}
+.dvp-setup-step-mini__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dvp-setup-step-mini__policy {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+.dvp-setup-card-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-primary);
 }
 
 /* ═══ CLI PANEL ═══ */
@@ -2784,3 +3083,52 @@ body {
   color: #fff;
   border-color: var(--red);
 }
+
+/* ═══ DASHBOARD EMPTY STATE REFINEMENTS ═══ */
+.dvp-summary-empty__title { font-size: 18px; font-weight: 600; color: var(--text-primary); }
+.dvp-summary-empty__sub { font-size: 13px; max-width: 340px; line-height: 1.5; }
+
+/* ═══ TAB CONTEXT MENU ═══ */
+.dvp-tab-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 170px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  animation: dvp-ctx-fade-in 0.12s ease;
+}
+@keyframes dvp-ctx-fade-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.dvp-tab-context-menu__item {
+  display: block;
+  width: 100%;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+.dvp-tab-context-menu__item:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+}
+.dvp-tab-context-menu__item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* ═══ TAB CLOSE BUTTON — show on hover (IDE pattern) ═══ */
+.dvp-tab .dvp-tab__close { opacity: 0; }
+.dvp-tab:hover .dvp-tab__close,
+.dvp-tab--active .dvp-tab__close { opacity: 0.4; }
+.dvp-tab .dvp-tab__close:hover { opacity: 1; }

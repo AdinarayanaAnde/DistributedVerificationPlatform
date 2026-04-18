@@ -6,9 +6,14 @@ export interface TestItem {
 
 export interface RunOut {
   id: number;
+  run_name: string | null;
   client_id: number;
   resource_id: number | null;
   selected_tests: string[];
+  setup_config_id: number | null;
+  setup_status: string | null;
+  teardown_config_id: number | null;
+  teardown_status: string | null;
   status: string;
   note: string | null;
   created_at: string;
@@ -24,7 +29,7 @@ export interface ClientOut {
 }
 
 export type Theme = "dark" | "light";
-export type ExplorerMode = "tests" | "suites" | "cli";
+export type ExplorerMode = "tests" | "suites" | "cli" | "setup" | "teardown" | "upload";
 export type TestStatus = "not-started" | "running" | "done" | "fail" | "error" | "cancelled";
 
 export interface LogLine {
@@ -65,4 +70,49 @@ export interface TestSuite {
   description: string;
   tests: string[];
   tags: string[];
+  source: "auto" | "custom" | "marker";
+  estimated_duration?: number | null;
+  last_run?: { run_id: number; run_name?: string | null; status: string; timestamp: string } | null;
+}
+
+export interface SetupStep {
+  id?: number;
+  name: string;
+  step_type: string;
+  command: string;
+  timeout: number;
+  order?: number;
+  on_failure: string;
+  env_vars?: Record<string, string> | null;
+}
+
+export interface SetupConfiguration {
+  id: number;
+  name: string;
+  description: string;
+  steps: SetupStep[];
+  created_by?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeardownStep {
+  id?: number;
+  name: string;
+  step_type: string;
+  command: string;
+  timeout: number;
+  order?: number;
+  on_failure: string;
+  env_vars?: Record<string, string> | null;
+}
+
+export interface TeardownConfiguration {
+  id: number;
+  name: string;
+  description: string;
+  steps: TeardownStep[];
+  created_by?: number | null;
+  created_at: string;
+  updated_at: string;
 }

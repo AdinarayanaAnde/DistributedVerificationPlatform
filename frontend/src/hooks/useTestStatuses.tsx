@@ -25,14 +25,18 @@ export function useTestStatuses(
     }
     for (const line of logLines) {
       const msg = line.message;
+      const src = line.source || "";
       for (const id of run.selected_tests) {
         if (!(id in statuses)) continue;
         if (statuses[id] === "done" || statuses[id] === "fail" || statuses[id] === "error") continue;
         const parts = id.split("::");
         const funcName = parts[parts.length - 1];
-        if (msg.includes(id) || (funcName && msg.includes(funcName))) {
-          if (msg.includes("PASSED")) statuses[id] = "done";
-          else if (msg.includes("FAILED")) statuses[id] = "fail";
+        // Match by message content OR by source field (which carries the test nodeid)
+        const matchesById = msg.includes(id) || (funcName && msg.includes(funcName));
+        const matchesBySource = src === id;
+        if (matchesById || matchesBySource) {
+          if (msg.includes("PASSED") || (matchesBySource && line.level === "PASS")) statuses[id] = "done";
+          else if (msg.includes("FAILED") || (matchesBySource && line.level === "FAIL" && !msg.startsWith("==="))) statuses[id] = "fail";
           else if (
             line.level === "FAIL" &&
             /\bERROR\b/.test(msg) &&
@@ -56,9 +60,12 @@ export function useTestStatuses(
         }
       }
     } else if (run.status === "failed") {
+      // Run "failed" means at least one test failed, but others may have passed.
+      // Only mark remaining "running" tests as "done" — the actually failed ones
+      // were already set to "fail"/"error" from log parsing above.
       for (const id of run.selected_tests) {
         if (statuses[id] === "running") {
-          statuses[id] = "error";
+          statuses[id] = "done";
         }
       }
     }

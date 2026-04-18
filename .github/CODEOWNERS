@@ -1,0 +1,15 @@
+# Default owner for everything in the repo
+*                       @AdinarayanaAnde
+
+# Backend
+/backend/               @AdinarayanaAnde
+
+# Frontend
+/frontend/              @AdinarayanaAnde
+
+# Infrastructure & deployment
+/k8s/                   @AdinarayanaAnde
+/docker-compose*.yml    @AdinarayanaAnde
+
+# CI/CD & GitHub config
+/.github/               @AdinarayanaAnde

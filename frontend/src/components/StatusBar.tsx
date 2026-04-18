@@ -1,4 +1,5 @@
 import type { ExplorerMode, RunOut } from "../types";
+import { runLabel } from "../utils/format";
 
 interface StatusBarProps {
   isRunning: boolean;
@@ -33,7 +34,7 @@ export default function StatusBar({
       {explorerMode === "cli" && cliCommand && (
         <span className="dvp-statusbar__item">CLI: {cliCommand.slice(0, 30)}</span>
       )}
-      {run && <span className="dvp-statusbar__item">Run #{run.id}</span>}
+      {run && <span className="dvp-statusbar__item">{runLabel(run)}</span>}
     </div>
   );
 }

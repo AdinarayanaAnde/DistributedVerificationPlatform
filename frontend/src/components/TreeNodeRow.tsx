@@ -1,42 +1,30 @@
 import type { TreeNode, TestStatus, RunOut, ReportAvailability } from "../types";
 import { getAllTestIds, getCheckState, getNodeStatus } from "../utils/tree";
 import { STATUS_LABELS } from "../constants";
+import { useTreeContext } from "../contexts/TreeContext";
+import { useMemo } from "react";
 
 interface TreeNodeRowProps {
   node: TreeNode;
   depth: number;
-  selectedTests: string[];
-  expandedNodes: Set<string>;
-  testStatuses: Record<string, TestStatus>;
-  run: RunOut | null;
-  isRunning: boolean;
-  reportAvail: ReportAvailability;
-  openReportDropdown: string | null;
-  onToggleExpanded: (path: string) => void;
-  onToggleSelection: (node: TreeNode) => void;
-  onOpenLogTab: (nodeId: string, label: string, filterKey: string) => void;
-  onOpenNodeReport: (node: TreeNode) => void;
-  onSetReportDropdown: (path: string | null) => void;
-  onOpenReport: (type: string) => void;
 }
 
-export default function TreeNodeRow({
-  node,
-  depth,
-  selectedTests,
-  expandedNodes,
-  testStatuses,
-  run,
-  isRunning,
-  reportAvail,
-  openReportDropdown,
-  onToggleExpanded,
-  onToggleSelection,
-  onOpenLogTab,
-  onOpenNodeReport,
-  onSetReportDropdown,
-  onOpenReport,
-}: TreeNodeRowProps) {
+export default function TreeNodeRow({ node, depth }: TreeNodeRowProps) {
+  const {
+    selectedTests,
+    expandedNodes,
+    testStatuses,
+    run,
+    isRunning,
+    reportAvail,
+    openReportDropdown,
+    onToggleExpanded,
+    onToggleSelection,
+    onOpenLogTab,
+    onOpenNodeReport,
+    onSetReportDropdown,
+    onOpenReport,
+  } = useTreeContext();
   const isExpandable = node.type !== "test" && node.children.length > 0;
   const isExpanded = expandedNodes.has(node.path);
   const checkState = getCheckState(node, selectedTests);
@@ -53,6 +41,15 @@ export default function TreeNodeRow({
         : "\u{1F9EA}";
 
   const nodeFilterKey = node.type === "test" ? node.nodeid! : node.path;
+
+  // Check if this node has tests that were part of the completed run
+  const nodeWasRun = useMemo(() => {
+    if (!run) return false;
+    const runTests = new Set(run.selected_tests);
+    if (node.type === "test" && node.nodeid) return runTests.has(node.nodeid);
+    const nodeTestIds = getAllTestIds(node);
+    return nodeTestIds.some((id) => runTests.has(id));
+  }, [run, node]);
 
   return (
     <div key={node.path}>
@@ -107,9 +104,13 @@ export default function TreeNodeRow({
                 {STATUS_LABELS[status]}
               </button>
             )}
-            {run &&
-              (run.status === "completed" || run.status === "failed" || run.status === "cancelled") &&
-              (node.type === "file" || node.type === "test") && (
+          </div>
+        )}
+        {run &&
+          nodeWasRun &&
+          (run.status === "completed" || run.status === "failed" || run.status === "cancelled") && (
+          <div className="dvp-tree-actions">
+            {(node.type === "file" || node.type === "test") && (
                 <button
                   className="dvp-report-btn"
                   onClick={(e) => {
@@ -120,9 +121,7 @@ export default function TreeNodeRow({
                   {"\u{1F4CB}"} Report
                 </button>
               )}
-            {run &&
-              (run.status === "completed" || run.status === "failed" || run.status === "cancelled") &&
-              node.type === "folder" && (
+            {node.type === "folder" && (
                 <div style={{ position: "relative" }}>
                   <button
                     className="dvp-report-btn"
@@ -178,19 +177,6 @@ export default function TreeNodeRow({
             key={child.path}
             node={child}
             depth={depth + 1}
-            selectedTests={selectedTests}
-            expandedNodes={expandedNodes}
-            testStatuses={testStatuses}
-            run={run}
-            isRunning={isRunning}
-            reportAvail={reportAvail}
-            openReportDropdown={openReportDropdown}
-            onToggleExpanded={onToggleExpanded}
-            onToggleSelection={onToggleSelection}
-            onOpenLogTab={onOpenLogTab}
-            onOpenNodeReport={onOpenNodeReport}
-            onSetReportDropdown={onSetReportDropdown}
-            onOpenReport={onOpenReport}
           />
         ))}
     </div>

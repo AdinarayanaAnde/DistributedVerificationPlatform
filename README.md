@@ -1,8 +1,8 @@
 # Distributed Verification Platform
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Node.js 16+](https://img.shields.io/badge/node.js-16+-green.svg)](https://nodejs.org/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Node.js 18+](https://img.shields.io/badge/node.js-18+-green.svg)](https://nodejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18+-61dafb.svg)](https://reactjs.org/)
 
@@ -12,12 +12,15 @@ A comprehensive web-based test automation platform with distributed execution, r
 
 - [Features](#features)
 - [Architecture](#architecture)
-- [Quick Start](#run-locally)
+- [Quick Start](#quick-start)
 - [API Documentation](#api-documentation)
 - [Development](#development)
 - [Deployment](#deployment)
 - [Contributing](#contributing)
 - [License](#license)
+- [Support](#support)
+- [Project Structure](#project-structure)
+- [Missing (Optional but Recommended)](#missing-optional-but-recommended)
 - React frontend for test selection, logs, and summaries
 - FastAPI backend with async orchestration
 - Pytest test execution and result capture
@@ -162,13 +165,15 @@ graph TB
 ## Requirements
 
 - **Python** >= 3.11
-- **Node.js** >= 16
+- **Node.js** >= 18
 - **PostgreSQL** (production) or SQLite (local development)
 - **Docker** (optional, for containerized deployment)
 
 For complete dependency lists, see:
 - Backend: [backend/pyproject.toml](backend/pyproject.toml)
 - Frontend: [frontend/package.json](frontend/package.json)
+
+Dependency updates are automated with GitHub Dependabot using `.github/dependabot.yml`.
 
 ## Quick Start
 
@@ -184,7 +189,8 @@ For complete dependency lists, see:
 3. Start the backend server:
    ```powershell
    cd backend
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   .venv\Scripts\activate
+   python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
 
 ### Frontend
@@ -225,8 +231,8 @@ Once the backend is running, visit:
 
 ### Prerequisites
 
-- Python 3.8+
-- Node.js 16+
+- Python 3.11+
+- Node.js 18+
 - PostgreSQL (optional, defaults to SQLite)
 
 ### Backend Development
@@ -237,7 +243,7 @@ python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e .
 cp .env.example .env  # Configure your settings
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Frontend Development
@@ -306,8 +312,11 @@ For questions or issues:
 
 ## Project Structure
 
-- `backend/app` - FastAPI app, SQLAlchemy models, service layer
-- `frontend/src` - React UI with pages for test selection, run status, and logs
-- `backend/tests` - example pytest tests for discovery and execution
-- `k8s/` - Kubernetes deployment manifests
+- `backend/app` — FastAPI app, SQLAlchemy models, service layer
+- `frontend/src` — React + TypeScript UI (test selection, run status, logs, reports)
+- `tests/` — pytest test suites for discovery and execution
+- `docs/` — Architecture, requirements, and user guide
+- `k8s/` — Kubernetes deployment manifests
+- `setup_scripts/` — Pre-run environment checks and validation
+- `teardown_scripts/` — Post-run cleanup and archival
 

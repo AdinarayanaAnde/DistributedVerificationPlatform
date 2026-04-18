@@ -1,3 +1,5 @@
+import { runLabel } from "../utils/format";
+
 interface ReportTabProps {
   data: any;
 }
@@ -18,7 +20,7 @@ export default function ReportTab({ data }: ReportTabProps) {
           {"\u{1F4CB}"} {data.file || data.nodeid || data.file_key || "Report"}
           {data.run_id && (
             <span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 8 }}>
-              Run #{data.run_id}
+              {runLabel({ id: data.run_id, run_name: data.run_name })}
             </span>
           )}
         </div>

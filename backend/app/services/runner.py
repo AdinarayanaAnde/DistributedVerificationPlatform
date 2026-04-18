@@ -15,7 +15,7 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import AsyncSessionLocal
-from app.models import LogEntry, Run
+from app.models import Client, LogEntry, Run, SetupConfiguration, SetupStep
 from app.services.notifications import NotificationService
 
 logger = logging.getLogger(__name__)
@@ -114,6 +114,276 @@ def _start_pytest_process(args: list[str], cwd: str, env: dict, line_queue: queu
     return proc, stdout_thread, stderr_thread
 
 
+# ── Setup Configuration Execution ──────────────────────────────────────────────
+
+async def execute_setup_steps(run_id: int, config_id: int, db: AsyncSession) -> bool:
+    """Execute setup configuration steps before a test run.
+
+    Returns True if all steps passed (or were skipped), False if the run should be aborted.
+    """
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    config = await db.get(SetupConfiguration, config_id, options=[selectinload(SetupConfiguration.steps)])
+    if not config:
+        async with AsyncSessionLocal() as log_session:
+            log_session.add(LogEntry(
+                run_id=run_id, level="ERROR", source="setup",
+                message=f"Setup configuration #{config_id} not found — skipping setup",
+            ))
+            await log_session.commit()
+        return True  # Don't block the run
+
+    run = await db.get(Run, run_id)
+    if run:
+        run.setup_status = "running"
+        await db.commit()
+
+    async with AsyncSessionLocal() as log_session:
+        log_session.add(LogEntry(
+            run_id=run_id, level="INFO", source="setup",
+            message=f"▶ Starting setup: {config.name} ({len(config.steps)} step(s))",
+        ))
+        await log_session.commit()
+
+    cwd = str(BASE_DIR)
+    all_passed = True
+
+    for step in sorted(config.steps, key=lambda s: s.order):
+        step_env = {**os.environ}
+        if step.env_vars:
+            step_env.update(step.env_vars)
+
+        async with AsyncSessionLocal() as log_session:
+            log_session.add(LogEntry(
+                run_id=run_id, level="INFO", source="setup",
+                message=f"  ⏳ Step {step.order + 1}: {step.name} — {step.command}",
+            ))
+            await log_session.commit()
+
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                step.command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+                env=step_env,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=step.timeout)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()
+                async with AsyncSessionLocal() as log_session:
+                    log_session.add(LogEntry(
+                        run_id=run_id, level="ERROR", source="setup",
+                        message=f"  ✗ Step {step.order + 1}: {step.name} — TIMEOUT after {step.timeout}s",
+                    ))
+                    await log_session.commit()
+                if step.on_failure == "fail":
+                    all_passed = False
+                    break
+                continue
+
+            # Log stdout/stderr
+            async with AsyncSessionLocal() as log_session:
+                if stdout and stdout.strip():
+                    for line in stdout.decode(errors="replace").strip().splitlines():
+                        log_session.add(LogEntry(
+                            run_id=run_id, level="INFO", source="setup",
+                            message=f"    | {line}",
+                        ))
+                if stderr and stderr.strip():
+                    for line in stderr.decode(errors="replace").strip().splitlines():
+                        log_session.add(LogEntry(
+                            run_id=run_id, level="ERROR", source="setup",
+                            message=f"    | {line}",
+                        ))
+                await log_session.commit()
+
+            if proc.returncode != 0:
+                async with AsyncSessionLocal() as log_session:
+                    log_session.add(LogEntry(
+                        run_id=run_id, level="FAIL", source="setup",
+                        message=f"  ✗ Step {step.order + 1}: {step.name} — FAILED (exit code {proc.returncode})",
+                    ))
+                    await log_session.commit()
+                if step.on_failure == "fail":
+                    all_passed = False
+                    break
+                elif step.on_failure == "skip":
+                    continue
+                # on_failure == "continue" — keep going
+            else:
+                async with AsyncSessionLocal() as log_session:
+                    log_session.add(LogEntry(
+                        run_id=run_id, level="PASS", source="setup",
+                        message=f"  ✓ Step {step.order + 1}: {step.name} — PASSED",
+                    ))
+                    await log_session.commit()
+
+        except Exception as e:
+            async with AsyncSessionLocal() as log_session:
+                log_session.add(LogEntry(
+                    run_id=run_id, level="ERROR", source="setup",
+                    message=f"  ✗ Step {step.order + 1}: {step.name} — ERROR: {e}",
+                ))
+                await log_session.commit()
+            if step.on_failure == "fail":
+                all_passed = False
+                break
+
+    # Update setup status
+    run = await db.get(Run, run_id)
+    if run:
+        run.setup_status = "passed" if all_passed else "failed"
+        await db.commit()
+
+    async with AsyncSessionLocal() as log_session:
+        status_icon = "✓" if all_passed else "✗"
+        log_session.add(LogEntry(
+            run_id=run_id, level="PASS" if all_passed else "FAIL", source="setup",
+            message=f"{status_icon} Setup {'completed successfully' if all_passed else 'FAILED'}: {config.name}",
+        ))
+        await log_session.commit()
+
+    return all_passed
+
+
+# ── Teardown Configuration Execution ──────────────────────────────────────────
+
+async def execute_teardown_steps(run_id: int, config_id: int, db: AsyncSession) -> bool:
+    """Execute teardown configuration steps after a test run.
+
+    Returns True if all steps passed (or were skipped), False if any step failed.
+    Teardown always runs regardless of test outcome.
+    """
+    from sqlalchemy.orm import selectinload
+    from app.models import TeardownConfiguration
+
+    config = await db.get(TeardownConfiguration, config_id, options=[selectinload(TeardownConfiguration.steps)])
+    if not config:
+        async with AsyncSessionLocal() as log_session:
+            log_session.add(LogEntry(
+                run_id=run_id, level="ERROR", source="teardown",
+                message=f"Teardown configuration #{config_id} not found — skipping teardown",
+            ))
+            await log_session.commit()
+        return True
+
+    run = await db.get(Run, run_id)
+    if run:
+        run.teardown_status = "running"
+        await db.commit()
+
+    async with AsyncSessionLocal() as log_session:
+        log_session.add(LogEntry(
+            run_id=run_id, level="INFO", source="teardown",
+            message=f"▶ Starting teardown: {config.name} ({len(config.steps)} step(s))",
+        ))
+        await log_session.commit()
+
+    cwd = str(BASE_DIR)
+    all_passed = True
+
+    for step in sorted(config.steps, key=lambda s: s.order):
+        step_env = {**os.environ}
+        if step.env_vars:
+            step_env.update(step.env_vars)
+
+        async with AsyncSessionLocal() as log_session:
+            log_session.add(LogEntry(
+                run_id=run_id, level="INFO", source="teardown",
+                message=f"  ⏳ Step {step.order + 1}: {step.name} — {step.command}",
+            ))
+            await log_session.commit()
+
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                step.command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+                env=step_env,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=step.timeout)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()
+                async with AsyncSessionLocal() as log_session:
+                    log_session.add(LogEntry(
+                        run_id=run_id, level="ERROR", source="teardown",
+                        message=f"  ✗ Step {step.order + 1}: {step.name} — TIMEOUT after {step.timeout}s",
+                    ))
+                    await log_session.commit()
+                if step.on_failure == "fail":
+                    all_passed = False
+                    break
+                continue
+
+            async with AsyncSessionLocal() as log_session:
+                if stdout and stdout.strip():
+                    for line in stdout.decode(errors="replace").strip().splitlines():
+                        log_session.add(LogEntry(
+                            run_id=run_id, level="INFO", source="teardown",
+                            message=f"    | {line}",
+                        ))
+                if stderr and stderr.strip():
+                    for line in stderr.decode(errors="replace").strip().splitlines():
+                        log_session.add(LogEntry(
+                            run_id=run_id, level="ERROR", source="teardown",
+                            message=f"    | {line}",
+                        ))
+                await log_session.commit()
+
+            if proc.returncode != 0:
+                async with AsyncSessionLocal() as log_session:
+                    log_session.add(LogEntry(
+                        run_id=run_id, level="FAIL", source="teardown",
+                        message=f"  ✗ Step {step.order + 1}: {step.name} — FAILED (exit code {proc.returncode})",
+                    ))
+                    await log_session.commit()
+                if step.on_failure == "fail":
+                    all_passed = False
+                    break
+                elif step.on_failure == "skip":
+                    continue
+            else:
+                async with AsyncSessionLocal() as log_session:
+                    log_session.add(LogEntry(
+                        run_id=run_id, level="PASS", source="teardown",
+                        message=f"  ✓ Step {step.order + 1}: {step.name} — PASSED",
+                    ))
+                    await log_session.commit()
+
+        except Exception as e:
+            async with AsyncSessionLocal() as log_session:
+                log_session.add(LogEntry(
+                    run_id=run_id, level="ERROR", source="teardown",
+                    message=f"  ✗ Step {step.order + 1}: {step.name} — ERROR: {e}",
+                ))
+                await log_session.commit()
+            if step.on_failure == "fail":
+                all_passed = False
+                break
+
+    run = await db.get(Run, run_id)
+    if run:
+        run.teardown_status = "passed" if all_passed else "failed"
+        await db.commit()
+
+    async with AsyncSessionLocal() as log_session:
+        status_icon = "✓" if all_passed else "✗"
+        log_session.add(LogEntry(
+            run_id=run_id, level="PASS" if all_passed else "FAIL", source="teardown",
+            message=f"{status_icon} Teardown {'completed successfully' if all_passed else 'FAILED'}: {config.name}",
+        ))
+        await log_session.commit()
+
+    return all_passed
+
+
 async def capture_test_run(run_id: int, selected_tests: list[str], db: AsyncSession, notification_service: NotificationService | None = None) -> None:
     run_statement = await db.get(Run, run_id)
     if run_statement is None:
@@ -141,6 +411,22 @@ async def capture_test_run(run_id: int, selected_tests: list[str], db: AsyncSess
     # Group tests by file and launch one pytest process per file (parallel)
     file_groups = _group_tests_by_file(selected_tests) if selected_tests else {}
 
+    # Validate that test files actually exist before launching pytest
+    missing_files = []
+    for file_path in list(file_groups.keys()):
+        full_path = Path(cwd) / file_path
+        if not full_path.exists():
+            missing_files.extend(file_groups.pop(file_path))
+    if missing_files:
+        async with AsyncSessionLocal() as log_session:
+            for mf in missing_files:
+                log_session.add(LogEntry(
+                    run_id=run_id, client_id=run_statement.client_id,
+                    level="WARN", source=mf,
+                    message=f"Skipped {mf} — file no longer exists",
+                ))
+            await log_session.commit()
+
     # Each process gets its own JUnit XML output path
     processes: list[tuple[subprocess.Popen, threading.Thread, threading.Thread, str, Path | None]] = []
 
@@ -167,15 +453,41 @@ async def capture_test_run(run_id: int, selected_tests: list[str], db: AsyncSess
 
     # Build a set of test nodeids for tagging log lines to specific tests
     test_nodeids = set(selected_tests) if selected_tests else set()
+    # Build a reverse index from short function name → full nodeid for failure section matching
+    _func_to_nodeid: dict[str, str] = {}
+    for nid in test_nodeids:
+        parts = nid.split("::")
+        if len(parts) >= 2:
+            _func_to_nodeid[parts[-1]] = nid
     current_test_per_group: dict[str, str | None] = {tag: None for _, _, _, tag, _ in processes}
+    # Track whether we're inside a FAILURES/ERRORS section (between === headers)
+    _in_failure_section: dict[str, bool] = {tag: False for _, _, _, tag, _ in processes}
 
     # Register processes for cancellation support
     _active_runs[run_id] = {tag: proc for proc, _, _, tag, _ in processes}
 
-    def _identify_test(line: str) -> str | None:
+    # Regex to detect pytest failure/error section headers like "_____ test_name _____"
+    import re
+    _section_header_re = re.compile(r"^_+ (.+?) _+$")
+
+    def _identify_test(line: str, group_tag: str) -> str | None:
+        # Direct nodeid match
         for nid in test_nodeids:
             if nid in line:
                 return nid
+        # Check for pytest failure section header: "_____ test_func _____"
+        m = _section_header_re.match(line.strip())
+        if m:
+            header_name = m.group(1)
+            # Try matching against known test function names
+            if header_name in _func_to_nodeid:
+                _in_failure_section[group_tag] = True
+                return _func_to_nodeid[header_name]
+            # Try partial match (class::method format in header)
+            for nid in test_nodeids:
+                if header_name in nid:
+                    _in_failure_section[group_tag] = True
+                    return nid
         return None
 
     # Track which file-processes have already had per-file reports generated
@@ -202,18 +514,27 @@ async def capture_test_run(run_id: int, selected_tests: list[str], db: AsyncSess
                 elif line.startswith("E ") or "AssertionError" in line:
                     log_level = "FAIL"
 
-                mentioned_test = _identify_test(line)
+                mentioned_test = _identify_test(line, group_tag)
                 if mentioned_test:
                     current_test_per_group[group_tag] = mentioned_test
                     source = mentioned_test
                 elif current_test_per_group.get(group_tag) and not (
-                    line.startswith("===") or line.startswith("---")
-                    or "passed" in line or "failed" in line or "error" in line
+                    line.startswith("===")
+                    or (line.startswith("---") and " passed" in line)
                 ):
+                    # Keep attributing to the current test for:
+                    #  - traceback lines, E lines, assertion lines
+                    #  - lines in FAILURES/ERRORS sections
+                    # Only reset on "===" separators or final summary lines like "--- 2 passed ---"
                     source = current_test_per_group[group_tag]
                 else:
                     source = "session"
-                    if line.startswith("===") or line.startswith("---"):
+                    if line.startswith("==="):
+                        # Check if entering or leaving a failures section
+                        if "FAILURES" in line or "ERRORS" in line:
+                            _in_failure_section[group_tag] = True
+                        else:
+                            _in_failure_section[group_tag] = False
                         current_test_per_group[group_tag] = None
 
                 entry = LogEntry(
@@ -272,6 +593,30 @@ async def capture_test_run(run_id: int, selected_tests: list[str], db: AsyncSess
             t1.join(timeout=2)
             t2.join(timeout=2)
 
+    # Drain any lines the reader threads produced after the main loop exited
+    remaining: list[tuple[str, str, str]] = []
+    try:
+        while True:
+            remaining.append(line_queue.get_nowait())
+    except queue.Empty:
+        pass
+    if remaining:
+        async with AsyncSessionLocal() as drain_session:
+            for base_level, line, group_tag in remaining:
+                log_level = base_level
+                if "PASSED" in line:
+                    log_level = "PASS"
+                elif "FAILED" in line or "ERROR" in line:
+                    log_level = "FAIL"
+                drain_session.add(LogEntry(
+                    run_id=run_id,
+                    client_id=run_statement.client_id,
+                    level=log_level,
+                    source="session",
+                    message=line,
+                ))
+            await drain_session.commit()
+
     # Unregister from active runs
     _active_runs.pop(run_id, None)
 
@@ -285,13 +630,6 @@ async def capture_test_run(run_id: int, selected_tests: list[str], db: AsyncSess
     # Determine overall status
     any_failed = any(proc.returncode != 0 for proc, _, _, _, _ in processes)
 
-    # Skip expensive report finalization on cancel (avoids re-running tests for coverage/allure)
-    if not cancelled:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None, _finalize_reports, run_id, selected_tests, run_dir
-        )
-
     # Refresh run from DB to pick up any status change by the cancel endpoint
     await db.refresh(run_statement)
 
@@ -300,24 +638,55 @@ async def capture_test_run(run_id: int, selected_tests: list[str], db: AsyncSess
     elif run_statement.status != "cancelled":
         run_statement.status = "failed" if any_failed else "completed"
     run_statement.finished_at = datetime.now(timezone.utc)
+    # Commit status BEFORE finalization so the UI sees completion immediately
     await db.commit()
 
+    # Run report finalization after committing status (tests are NOT re-executed here)
+    if not cancelled:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None, _finalize_reports, run_id, selected_tests, run_dir
+        )
+
     if notification_service:
-        await notification_service.notify_run_completion(run_statement.client, run_statement)
+        # Explicitly load the client to avoid SQLAlchemy lazy-load in async context
+        client = await db.get(Client, run_statement.client_id)
+        if client:
+            await notification_service.notify_run_completion(client, run_statement)
+
+
+def _looks_like_python(arg: str) -> bool:
+    """Check if an argument looks like a python executable path."""
+    if arg == sys.executable:
+        return True
+    base = os.path.basename(arg)
+    # Handle cases where shlex strips backslashes on Windows
+    if not base or base == arg:
+        # Try extracting basename manually for mangled paths
+        for sep in ("/", "\\"):
+            if sep in arg:
+                base = arg.rsplit(sep, 1)[-1]
+                break
+        # If still the full string, check if it ends with a python-like name
+        if base == arg and "python" in arg.lower():
+            return True
+    return base.lower().startswith("python")
 
 
 def _is_pytest_command(args: list[str]) -> bool:
     """Check if the command list is a pytest invocation."""
+    # Normalise: collect the meaningful tokens, skipping python/executable and -m
     for a in args:
         if a in ("pytest", "-m") or "pytest" in a:
             continue
-        if a == sys.executable:
+        if _looks_like_python(a):
             continue
         break
     # After normalisation the first real binary is pytest
     base = args[0] if args else ""
+    is_exe = _looks_like_python(base)
     return base == "pytest" or (
-        len(args) >= 3 and args[0] == sys.executable and args[1] == "-m" and args[2] == "pytest"
+        len(args) >= 3 and is_exe and args[1] == "-m" and args[2] == "pytest"
     )
 
 
@@ -329,7 +698,9 @@ def _extract_test_targets_from_args(args: list[str]) -> list[str]:
         if skip_next:
             skip_next = False
             continue
-        if a in (sys.executable, "-m", "pytest"):
+        if _looks_like_python(a):
+            continue
+        if a in ("-m", "pytest"):
             continue
         # Skip flags that take a value
         if a in ("-k", "-m", "-p", "--rootdir", "--override-ini",
@@ -366,10 +737,17 @@ async def capture_cli_run(run_id: int, command: str, db: AsyncSession, notificat
     env = {**os.environ, "PYTHONUNBUFFERED": "1"}
     cwd = str(BASE_DIR)
 
+
     args = shlex.split(command)
 
-    # If command starts with 'pytest', prepend python -m
+    # If command starts with 'pytest', prepend python -m and ensure '-v' for verbose output
     if args and args[0] == "pytest":
+        # Add '-v' if not present for granular progress
+        if '-v' not in args:
+            args.append('-v')
+        # Add '--tb=short' for concise tracebacks on failures (industry standard)
+        if not any(a.startswith('--tb') for a in args):
+            args.append('--tb=short')
         args = [sys.executable, "-m"] + args
 
     is_pytest = _is_pytest_command(args)
@@ -397,6 +775,51 @@ async def capture_cli_run(run_id: int, command: str, db: AsyncSession, notificat
 
     run_start_time = asyncio.get_event_loop().time()
 
+    # Regex to detect pytest test nodeids from verbose output
+    # Matches lines like: tests/foo.py::test_bar PASSED
+    import re
+    _nodeid_re = re.compile(r"^(\S+\.py::\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)")
+    _section_header_re_cli = re.compile(r"^_+ (.+?) _+$")
+    current_test: str | None = None
+    discovered_nodeids: list[str] = []  # Track all test nodeids for progress reporting
+    # Build reverse index from function name → nodeid for failure section matching
+    _cli_func_to_nodeid: dict[str, str] = {}
+
+    def _detect_source(line: str) -> str:
+        """Detect the test nodeid from a pytest output line."""
+        nonlocal current_test
+        m = _nodeid_re.match(line)
+        if m:
+            current_test = m.group(1)
+            if current_test not in discovered_nodeids:
+                discovered_nodeids.append(current_test)
+                # Update function→nodeid index
+                parts = current_test.split("::")
+                if len(parts) >= 2:
+                    _cli_func_to_nodeid[parts[-1]] = current_test
+            return current_test
+        # Check for failure section header: "_____ test_func _____"
+        sm = _section_header_re_cli.match(line.strip())
+        if sm:
+            header_name = sm.group(1)
+            if header_name in _cli_func_to_nodeid:
+                current_test = _cli_func_to_nodeid[header_name]
+                return current_test
+            # Partial match
+            for nid in discovered_nodeids:
+                if header_name in nid:
+                    current_test = nid
+                    return current_test
+        # Keep attributing to current test unless we hit a section separator
+        if current_test and not (
+            line.startswith("===")
+            or (line.startswith("---") and " passed" in line)
+        ):
+            return current_test
+        if line.startswith("==="):
+            current_test = None
+        return "cli"
+
     async with AsyncSessionLocal() as log_session:
         while True:
             lines_batch: list[tuple[str, str, str]] = []
@@ -413,17 +836,24 @@ async def capture_cli_run(run_id: int, command: str, db: AsyncSession, notificat
                 elif "FAILED" in line or "ERROR" in line:
                     log_level = "FAIL"
 
+                source = _detect_source(line) if is_pytest else "cli"
+
                 entry = LogEntry(
                     run_id=run_id,
                     client_id=run.client_id,
                     level=log_level,
-                    source="cli",
+                    source=source,
                     message=line,
                 )
                 log_session.add(entry)
 
             if lines_batch:
                 await log_session.commit()
+
+            # Update run.selected_tests with newly discovered nodeids for real-time progress
+            if is_pytest and discovered_nodeids and len(discovered_nodeids) != len(run.selected_tests or []):
+                run.selected_tests = list(discovered_nodeids)
+                await db.commit()
 
             if proc.poll() is not None and line_queue.empty() and not lines_batch:
                 break
@@ -441,10 +871,48 @@ async def capture_cli_run(run_id: int, command: str, db: AsyncSession, notificat
     t1.join(timeout=2)
     t2.join(timeout=2)
 
+    # Drain any lines the reader threads produced after the main loop exited
+    cli_remaining: list[tuple[str, str, str]] = []
+    try:
+        while True:
+            cli_remaining.append(line_queue.get_nowait())
+    except queue.Empty:
+        pass
+    if cli_remaining:
+        async with AsyncSessionLocal() as drain_session:
+            for base_level, line, _ in cli_remaining:
+                log_level = base_level
+                if "PASSED" in line:
+                    log_level = "PASS"
+                elif "FAILED" in line or "ERROR" in line:
+                    log_level = "FAIL"
+                source = _detect_source(line) if is_pytest else "cli"
+                drain_session.add(LogEntry(
+                    run_id=run_id,
+                    client_id=run.client_id,
+                    level=log_level,
+                    source=source,
+                    message=line,
+                ))
+            await drain_session.commit()
+
     _active_runs.pop(run_id, None)
 
-    # Generate reports for pytest commands
-    if is_pytest:
+    # Final update of selected_tests with all discovered nodeids
+    if is_pytest and discovered_nodeids:
+        run.selected_tests = list(discovered_nodeids)
+
+    # Commit status BEFORE finalization so the UI sees completion immediately
+    cancelled = proc.returncode is not None and proc.returncode < 0
+    if cancelled:
+        run.status = "cancelled"
+    else:
+        run.status = "failed" if proc.returncode != 0 else "completed"
+    run.finished_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    # Generate reports for pytest commands after committing status (tests are NOT re-executed)
+    if is_pytest and not cancelled:
         # Generate per-file summary from the JUnit XML
         if junit_path and junit_path.exists():
             try:
@@ -456,24 +924,24 @@ async def capture_cli_run(run_id: int, command: str, db: AsyncSession, notificat
 
         # Extract selected_tests from command for finalization
         targets = _extract_test_targets_from_args(args)
-        selected_tests = targets if targets else []
+        selected_tests_for_report = targets if targets else []
 
-        # Run full report finalization (merge, JSON, coverage, allure, HTML)
+        # Run full report finalization (merge, JSON, HTML — no test re-execution)
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
-            None, _finalize_reports, run_id, selected_tests, run_dir
+            None, _finalize_reports, run_id, selected_tests_for_report, run_dir
         )
 
-    cancelled = proc.returncode is not None and proc.returncode < 0
-    if cancelled:
-        run.status = "cancelled"
-    else:
-        run.status = "failed" if proc.returncode != 0 else "completed"
-    run.finished_at = datetime.now(timezone.utc)
-    await db.commit()
+    # Trigger async report generation if run completed successfully
+    if run.status == "completed":
+        from app.services.report_generator import ReportGenerator
+        asyncio.create_task(ReportGenerator.generate_all_reports(run_id))
 
     if notification_service:
-        await notification_service.notify_run_completion(run.client, run)
+        # Explicitly load the client to avoid SQLAlchemy lazy-load in async context
+        client = await db.get(Client, run.client_id)
+        if client:
+            await notification_service.notify_run_completion(client, run)
 
 
 def _generate_file_summary(junit_path: Path, output_dir: Path, run_id: int, file_tag: str) -> None:
@@ -534,22 +1002,17 @@ def _generate_file_summary(junit_path: Path, output_dir: Path, run_id: int, file
 
 
 def _finalize_reports(run_id: int, selected_tests: list[str], run_dir: Path) -> None:
-    """Merge per-file JUnit XMLs into run-level reports. NO re-execution of tests.
+    """Merge per-file JUnit XMLs into run-level reports without re-executing tests.
 
-    This is called after all pytest processes have finished. Per-file JUnit XMLs
-    were already generated during the test run, so we:
+    Steps:
     1. Merge per-file JUnit XMLs into one run-level junit.xml
-    2. Derive JSON report from the merged JUnit (no re-run)
-    3. Run coverage ONCE, scoped to only the tested files
-    4. Split per-test reports (for any files not already processed)
-    5. Generate HTML report from merged data
+    2. Derive JSON report from the merged JUnit
+    3. Split per-test reports (fills any gaps not already covered)
+    4. Generate HTML report from merged data
     """
     per_file_dir = run_dir / "files"
     tests_dir = run_dir / "tests"
     tests_dir.mkdir(exist_ok=True)
-
-    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    cwd = str(BASE_DIR)
 
     # ── 1. Merge per-file JUnit XMLs ──
     junit_path = run_dir / "junit.xml"
@@ -579,58 +1042,15 @@ def _finalize_reports(run_id: int, selected_tests: list[str], run_dir: Path) -> 
         except Exception as e:
             logger.error("JSON report derivation failed for run %d: %s", run_id, e)
 
-    # ── 3. Coverage — scoped to only the test files that were selected ──
-    test_args = selected_tests if selected_tests else [str(TEST_ROOT)]
-    # Extract the actual source files being tested for --cov targets
-    tested_file_paths = set()
-    if selected_tests:
-        for nodeid in selected_tests:
-            fpath = nodeid.split("::")[0] if "::" in nodeid else nodeid
-            tested_file_paths.add(fpath)
-    cov_sources = list(tested_file_paths) if tested_file_paths else ["tests"]
-
-    try:
-        cov_dir = run_dir / "coverage"
-        cov_dir.mkdir(exist_ok=True)
-        cov_json = cov_dir / "coverage.json"
-        cov_args = [sys.executable, "-m", "pytest", "-q", "--tb=no"]
-        for src in cov_sources:
-            cov_args.append(f"--cov={src}")
-        cov_args.extend([
-            f"--cov-report=json:{cov_json}",
-            f"--cov-report=html:{cov_dir / 'htmlcov'}",
-            *test_args,
-        ])
-        subprocess.run(cov_args, cwd=cwd, env=env, capture_output=True, timeout=600)
-    except Exception as e:
-        logger.error("Coverage report failed for run %d: %s", run_id, e)
-
-    # ── 4. Allure - only if allure-pytest plugin is available ──
-    allure_dir = run_dir / "allure-results"
-    try:
-        # Check if allure-pytest is importable before running
-        check = subprocess.run(
-            [sys.executable, "-c", "import allure"],
-            capture_output=True, timeout=10
-        )
-        if check.returncode == 0:
-            allure_dir.mkdir(exist_ok=True)
-            allure_args = [
-                sys.executable, "-m", "pytest", "--tb=short", "-q",
-                f"--alluredir={allure_dir}", *test_args,
-            ]
-            subprocess.run(allure_args, cwd=cwd, env=env, capture_output=True, timeout=600)
-    except Exception as e:
-        logger.error("Allure report failed for run %d: %s", run_id, e)
-
-    # ── 5. Generate per-test data from merged JUnit (fills any gaps) ──
+    # ── 3. Generate per-test data from merged JUnit (fills any gaps) ──
     if junit_path.exists():
         try:
             _split_per_test_reports(junit_path, tests_dir, run_id)
         except Exception as e:
             logger.error("Per-test split failed for run %d: %s", run_id, e)
 
-    # ── 6. Generate HTML report ──
+    # ── 4. Generate HTML report ──
+    allure_dir = run_dir / "allure-results"
     try:
         if junit_path.exists():
             _generate_html_report_from_data(run_id, run_dir, junit_path, allure_dir)

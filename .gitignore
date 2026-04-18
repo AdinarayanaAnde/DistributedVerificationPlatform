@@ -8,10 +8,15 @@ venv/
 .venv/
 .env
 *.db
+*.db-journal
 *.sqlite
 *.egg-info/
 .coverage
+.coverage.*
+htmlcov/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Generated artifacts
 reports/
@@ -24,7 +29,31 @@ dist/
 build/
 .vite/
 
-# Misc
+# OS
 .DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors / IDEs
 .idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs & temp
 *.log
+*.tmp
+*.bak
+*.broken
+
+# Generated docs (regenerate locally)
+DVP_Platform_Overview.pdf
+generate_pdf.py
+FRONTEND_REFACTORING_ANALYSIS.md
+IMPLEMENTATION_SUMMARY.md
+REPORT_GENERATION_BEST_PRACTICES.md
+
+# TLS dev certs (regenerate locally)
+certs/
+

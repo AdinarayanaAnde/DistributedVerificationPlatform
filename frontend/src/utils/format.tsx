@@ -26,3 +26,7 @@ export function levelClass(level: string): string {
   if (l.includes("WARN")) return "WARNING";
   return "INFO";
 }
+
+export function runLabel(run: { id: number; run_name?: string | null }): string {
+  return run.run_name || `#${run.id}`;
+}
