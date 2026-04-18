@@ -5,19 +5,20 @@ interface ReportButtonsProps {
   reportAvail: ReportAvailability;
   onOpenReport: (type: string) => void;
   runId?: number;
+  clientKey?: string;
 }
 
-export function ReportButtons({ reportAvail, onOpenReport, runId }: ReportButtonsProps) {
+export function ReportButtons({ reportAvail, onOpenReport, runId, clientKey }: ReportButtonsProps) {
   if (Object.keys(reportAvail).length === 0) return null;
 
   const downloadReport = (type: string) => {
     if (!runId) return;
-    window.open(`${API_BASE}/runs/${runId}/reports/${type}/download`, "_blank");
+    window.open(`${API_BASE}/runs/${runId}/reports/${type}/download?client_key=${encodeURIComponent(clientKey || "")}`, "_blank");
   };
 
   const downloadAll = () => {
     if (!runId) return;
-    window.open(`${API_BASE}/runs/${runId}/reports/download-all`, "_blank");
+    window.open(`${API_BASE}/runs/${runId}/reports/download-all?client_key=${encodeURIComponent(clientKey || "")}`, "_blank");
   };
 
   return (

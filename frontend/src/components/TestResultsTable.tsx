@@ -78,6 +78,7 @@ interface TestResultsTableProps {
   logLines: LogLine[];
   reportAvail: ReportAvailability;
   onOpenLogTab: (nodeId: string, label: string, filterKey: string) => void;
+  clientKey?: string;
 }
 
 const STATUS_ICON: Record<string, string> = {
@@ -212,6 +213,7 @@ export default function TestResultsTable({
   logLines,
   reportAvail,
   onOpenLogTab,
+  clientKey,
 }: TestResultsTableProps) {
   const [filterTest, setFilterTest] = useState<string[]>([]);
   const [filterFile, setFilterFile] = useState<string[]>([]);
@@ -430,7 +432,7 @@ export default function TestResultsTable({
                             title="JSON Report"
                             onClick={() =>
                               window.open(
-                                `${API_BASE}/runs/${runId}/reports/test/${encodeURIComponent(testId)}`,
+                                `${API_BASE}/runs/${runId}/reports/test/${encodeURIComponent(testId)}?client_key=${encodeURIComponent(clientKey || "")}`,
                                 "_blank"
                               )
                             }
@@ -442,7 +444,7 @@ export default function TestResultsTable({
                             title="File-level Aggregate"
                             onClick={() =>
                               window.open(
-                                `${API_BASE}/runs/${runId}/reports/file/${encodeURIComponent(filePart)}`,
+                                `${API_BASE}/runs/${runId}/reports/file/${encodeURIComponent(filePart)}?client_key=${encodeURIComponent(clientKey || "")}`,
                                 "_blank"
                               )
                             }

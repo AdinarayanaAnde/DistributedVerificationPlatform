@@ -169,7 +169,7 @@ export default function Dashboard({
 
           {/* Reports section — shown prominently after summary for quick access */}
           {(run.status === "completed" || run.status === "failed" || run.status === "cancelled") && (
-            <ReportButtons reportAvail={reportAvail} onOpenReport={onOpenReport} runId={run.id} />
+            <ReportButtons reportAvail={reportAvail} onOpenReport={onOpenReport} runId={run.id} clientKey={clientKey} />
           )}
 
           {/* Test results table */}
@@ -181,6 +181,7 @@ export default function Dashboard({
               logLines={logLines}
               reportAvail={reportAvail}
               onOpenLogTab={onOpenLogTab}
+              clientKey={clientKey}
             />
           )}
         </div>
