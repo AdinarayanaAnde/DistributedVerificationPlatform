@@ -178,45 +178,100 @@ Dependency updates are automated with GitHub Dependabot using `.github/dependabo
 
 ## Quick Start
 
-### Backend
+### One-Command Setup (Recommended)
 
-1. Install dependencies:
-   ```powershell
+The bootstrap script installs all dependencies, configures the environment, and generates HTTPS certs:
+
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/AdinarayanaAnde/DistributedVerificationPlatform.git
+cd DistributedVerificationPlatform
+.\setup.ps1
+```
+
+**Linux / macOS:**
+```bash
+git clone https://github.com/AdinarayanaAnde/DistributedVerificationPlatform.git
+cd DistributedVerificationPlatform
+chmod +x setup.sh && ./setup.sh
+```
+
+After setup, start in **two terminals**:
+
+| Terminal | Command |
+|----------|---------|
+| Backend  | `cd backend && .venv\Scripts\activate && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000` |
+| Frontend | `cd frontend && npm run dev` |
+
+Then open **http://localhost:5173** in your browser.
+
+> **Flags**: `--skip-certs` to skip HTTPS cert generation, `--skip-frontend` for backend-only setup.
+
+### Using Docker Compose (Alternative)
+
+```powershell
+docker compose up --build
+```
+
+This starts PostgreSQL + backend + frontend — no manual setup needed.
+
+### Using Make (Linux/macOS)
+
+```bash
+make setup      # Full setup
+make backend    # Start backend
+make frontend   # Start frontend
+make test       # Run all tests
+make help       # Show all commands
+```
+
+<details>
+<summary><strong>Manual Setup (step-by-step)</strong></summary>
+
+#### Backend
+
+1. Create venv and install dependencies:
+   ```bash
    cd backend
-   pip install -U pip
-   python -m pip install -e .
+   python -m venv .venv
+   # Windows: .venv\Scripts\activate
+   # Linux/macOS: source .venv/bin/activate
+   pip install -e .
    ```
-2. Create or update `backend/.env` with a valid `DATABASE_URL`.
-3. Start the backend server:
-   ```powershell
-   cd backend
-   .venv\Scripts\activate
+2. Configure environment (auto-done by setup script):
+   ```bash
+   cp ../.env.example .env
+   # Edit .env — defaults to SQLite, no PostgreSQL needed
+   ```
+3. Start the backend:
+   ```bash
    python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
 
-### Frontend
+#### Frontend
 
-1. Install dependencies:
-   ```powershell
+1. Install and start:
+   ```bash
    cd frontend
    npm install
+   npm run dev
    ```
-2. Start the client:
-   ```powershell
-   npm run dev -- --host 0.0.0.0 --port 5173
-   ```
+
+</details>
 
 ### HTTPS / SSL Certificates (Optional)
 
-The Vite dev server automatically serves **HTTPS** when cert files exist at `certs/cert.pem` and `certs/key.pem` in the project root. If no certs are found, it falls back to plain HTTP.
+The Vite dev server automatically serves **HTTPS** when cert files exist at `certs/cert.pem` and `certs/key.pem` in the project root. If no certs are found, it falls back to plain HTTP. **The setup script generates these automatically.**
 
 > **Symptom**: `ERR_SSL_PROTOCOL_ERROR` when accessing via LAN IP (e.g. `https://192.168.1.6:5173`).
 > **Cause**: Either no certs exist, or the certificate's Subject Alternative Names (SANs) don't include your IP.
 
-**Generate a self-signed dev certificate (Windows PowerShell):**
+<details>
+<summary><strong>Manual cert generation</strong></summary>
+
+**Windows PowerShell:**
 
 ```powershell
-# 1. Create a cert with SANs for localhost + your LAN IP
 $cert = New-SelfSignedCertificate `
     -Subject "CN=DVP Dev" `
     -TextExtension @("2.5.29.17={text}DNS=localhost&IPAddress=192.168.1.6&IPAddress=127.0.0.1") `
@@ -225,11 +280,9 @@ $cert = New-SelfSignedCertificate `
     -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 `
     -KeyExportPolicy Exportable
 
-# 2. Export as PFX (temporary)
 $pwd = ConvertTo-SecureString -String "temp" -Force -AsPlainText
 Export-PfxCertificate -Cert $cert -FilePath certs/temp.pfx -Password $pwd | Out-Null
 
-# 3. Convert PFX → PEM using Python (cryptography is in backend deps)
 cd backend
 .venv/Scripts/python -c "
 from cryptography.hazmat.primitives.serialization import pkcs12, Encoding, PrivateFormat, NoEncryption
@@ -239,14 +292,11 @@ key, cert, _ = pkcs12.load_key_and_certificates(pfx, b'temp')
 Path('../certs/key.pem').write_bytes(key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()))
 Path('../certs/cert.pem').write_bytes(cert.public_bytes(Encoding.PEM))
 Path('../certs/temp.pfx').unlink()
-print('Done — certs/cert.pem + certs/key.pem written')
 "
-
-# 4. Clean up cert from Windows store
 Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)"
 ```
 
-**Generate using OpenSSL (Linux/macOS):**
+**Linux / macOS (OpenSSL):**
 
 ```bash
 openssl req -x509 -newkey rsa:2048 -nodes -days 730 \
@@ -255,9 +305,9 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 730 \
   -addext "subjectAltName=DNS:localhost,IP:192.168.1.6,IP:127.0.0.1"
 ```
 
-> **Note**: Replace `192.168.1.6` with your actual LAN IP. Certs are gitignored — each developer generates their own. On first browser visit, accept the self-signed cert warning (Advanced → Proceed).
+> Replace `192.168.1.6` with your actual LAN IP. Certs are gitignored — each developer generates their own.
 
-### Using Docker Compose
+</details>
 
 ```powershell
 docker compose up --build
