@@ -23,9 +23,11 @@ function Write-Warn($msg) { Write-Host "   $msg" -ForegroundColor Yellow }
 # -- 1. Check prerequisites ----------------------------------------------
 Write-Step "Checking prerequisites"
 
-$python = Get-Command python -ErrorAction SilentlyContinue
-if (-not $python) { throw "Python not found. Install Python 3.11+ from https://www.python.org/downloads/" }
-$pyVer = (python --version 2>&1) -replace 'Python ',''
+$pyOut = (python --version 2>&1) | Out-String
+if ($pyOut -notmatch 'Python (\d+\.\d+\.\d+)') {
+    throw "Python not found. Install Python 3.11+ from https://www.python.org/downloads/"
+}
+$pyVer = $Matches[1]
 $pyMajor, $pyMinor = $pyVer.Split('.')[0..1] | ForEach-Object { [int]$_ }
 if ($pyMajor -lt 3 -or ($pyMajor -eq 3 -and $pyMinor -lt 11)) {
     throw "Python 3.11+ required (found $pyVer). Download from https://www.python.org/downloads/"
