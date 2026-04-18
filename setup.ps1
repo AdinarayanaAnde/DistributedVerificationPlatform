@@ -23,7 +23,7 @@ function Write-Warn($msg) { Write-Host "   $msg" -ForegroundColor Yellow }
 # -- 1. Check prerequisites ----------------------------------------------
 Write-Step "Checking prerequisites"
 
-$pyOut = (python --version 2>&1) | Out-String
+try { $pyOut = (python --version 2>&1) | Out-String } catch { $pyOut = '' }
 if ($pyOut -notmatch 'Python (\d+\.\d+\.\d+)') {
     throw "Python not found. Install Python 3.11+ from https://www.python.org/downloads/"
 }
