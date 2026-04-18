@@ -10,8 +10,7 @@ export const STATUS_LABELS: Record<TestStatus, string> = {
 };
 
 export const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ||
-  `http://${window.location.hostname}:8000/api`;
+  import.meta.env.VITE_API_BASE_URL || "/api";
 
 export const CLI_EXAMPLES = [
   "pytest tests/ -v",

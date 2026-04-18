@@ -1,13 +1,7 @@
 import axios from "axios";
 
-const defaultBase =
-  typeof window !== "undefined"
-    ? `http://${window.location.hostname}:8000/api`
-    : "http://localhost:8000/api";
-
-
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || defaultBase,
+  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
   headers: {
     "Content-Type": "application/json",
   },
