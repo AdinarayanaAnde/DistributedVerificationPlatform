@@ -643,9 +643,10 @@ async def capture_test_run(run_id: int, selected_tests: list[str], db: AsyncSess
 
     # Run report finalization after committing status (tests are NOT re-executed here)
     if not cancelled:
+        run_display = run_statement.run_name or f"#{run_id}"
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
-            None, _finalize_reports, run_id, selected_tests, run_dir
+            None, _finalize_reports, run_id, selected_tests, run_dir, run_display
         )
 
     if notification_service:
@@ -927,9 +928,10 @@ async def capture_cli_run(run_id: int, command: str, db: AsyncSession, notificat
         selected_tests_for_report = targets if targets else []
 
         # Run full report finalization (merge, JSON, HTML — no test re-execution)
+        run_display = run.run_name or f"#{run_id}"
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
-            None, _finalize_reports, run_id, selected_tests_for_report, run_dir
+            None, _finalize_reports, run_id, selected_tests_for_report, run_dir, run_display
         )
 
     # Trigger async report generation if run completed successfully
@@ -1001,7 +1003,7 @@ def _generate_file_summary(junit_path: Path, output_dir: Path, run_id: int, file
     )
 
 
-def _finalize_reports(run_id: int, selected_tests: list[str], run_dir: Path) -> None:
+def _finalize_reports(run_id: int, selected_tests: list[str], run_dir: Path, run_display: str = "") -> None:
     """Merge per-file JUnit XMLs into run-level reports without re-executing tests.
 
     Steps:
@@ -1010,6 +1012,7 @@ def _finalize_reports(run_id: int, selected_tests: list[str], run_dir: Path) -> 
     3. Split per-test reports (fills any gaps not already covered)
     4. Generate HTML report from merged data
     """
+    run_display = run_display or f"#{run_id}"
     per_file_dir = run_dir / "files"
     tests_dir = run_dir / "tests"
     tests_dir.mkdir(exist_ok=True)
@@ -1053,7 +1056,7 @@ def _finalize_reports(run_id: int, selected_tests: list[str], run_dir: Path) -> 
     allure_dir = run_dir / "allure-results"
     try:
         if junit_path.exists():
-            _generate_html_report_from_data(run_id, run_dir, junit_path, allure_dir)
+            _generate_html_report_from_data(run_id, run_dir, junit_path, allure_dir, run_display)
     except Exception as e:
         logger.error("HTML report failed for run %d: %s", run_id, e)
 
@@ -1189,10 +1192,11 @@ def _split_per_test_reports(junit_path: Path, tests_dir: Path, run_id: int) -> N
     (tests_dir / "index.json").write_text(json.dumps(index, indent=2), encoding="utf-8")
 
 
-def _generate_html_report_from_data(run_id: int, run_dir: Path, junit_path: Path, allure_dir: Path) -> None:
+def _generate_html_report_from_data(run_id: int, run_dir: Path, junit_path: Path, allure_dir: Path, run_display: str = "") -> None:
     """Generate a standalone HTML report from JUnit XML data."""
     if not junit_path.exists():
         return
+    run_display = run_display or f"#{run_id}"
 
     import html as html_mod
 
@@ -1243,7 +1247,7 @@ def _generate_html_report_from_data(run_id: int, run_dir: Path, junit_path: Path
         allure_note = '<div class="allure-note">Allure results available in <code>allure-results/</code>. Run <code>allure serve</code> to view.</div>'
 
     html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>DVP Test Report - Run #{run_id}</title>
+<html><head><meta charset="utf-8"><title>DVP Test Report - {run_display}</title>
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 :root{{--bg:#0f0f1a;--bg-card:#1e1e2e;--border:#363653;--text:#e2e0f0;--text-muted:#9892b0;--text-label:#6e6888;--accent:#7c6ff7;--bg-th:#232336;--row-fail:rgba(247,108,108,0.05);--row-error:rgba(247,168,76,0.05);--code-bg:#232336;--green:#50d890;--red:#f76c6c;--orange:#f7a84c;--yellow:#f7c948;--blue:#56b6f7}}
@@ -1268,7 +1272,7 @@ tr.fail td{{background:var(--row-fail)}} tr.error td{{background:var(--row-error
 <script>
 (function(){{var p=new URLSearchParams(window.location.search).get('theme');if(p==='light')document.documentElement.classList.add('light');}})();
 </script></head><body>
-<div class="header"><h1>DVP Test Report</h1><p>Run #{run_id} &mdash; Generated {datetime.now(timezone.utc).isoformat()}</p></div>
+<div class="header"><h1>DVP Test Report</h1><p>{run_display} &mdash; Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}</p></div>
 {allure_note}
 <div class="cards">
 <div class="card"><div class="val">{total}</div><div class="lbl">Total Tests</div></div>
