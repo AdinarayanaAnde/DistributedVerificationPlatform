@@ -67,100 +67,101 @@ A comprehensive web-based test automation platform with distributed execution, r
 
 ```mermaid
 graph TB
-    subgraph "User Interface"
+    subgraph "Clients"
         A[Web Browser]
         B[CLI Client]
+        B2[CI/CD Pipeline]
     end
-    
-    subgraph "Frontend Layer"
-        C[React + TypeScript<br/>Port 5173]
-        C1[Dashboard]
-        C2[Test Tree]
-        C3[Log Viewer]
-        C4[Reports]
+
+    subgraph "Frontend — React 18 + TypeScript + Vite :5173"
+        C1[Test Explorer]
+        C2[Live Logs]
+        C3[Reports & Metrics]
+        C4[Run Management]
+        C5[Setup/Teardown Config]
     end
-    
-    subgraph "API Gateway"
-        D[FastAPI Server<br/>Port 8000]
+
+    subgraph "API Gateway — FastAPI :8000"
         D1[REST API]
-        D2[WebSocket]
+        D2[WebSocket /ws/logs]
+        D3[JWT Auth + Rate Limiting]
     end
-    
-    subgraph "Business Logic"
-        E[Test Runner]
-        F[Queue Manager]
-        G[Resource Manager]
-        H[Report Generator]
+
+    subgraph "Service Layer — Python 3.11 Async"
+        E1[Test Runner<br/>File-level parallel pytest]
+        E2[Queue Manager<br/>FIFO resource locking]
+        E3[Report Generator<br/>HTML · JSON · JUnit XML]
+        E4[Notifier<br/>Email + Webhook]
+        E5[Purge Service<br/>Retention policies]
     end
-    
-    subgraph "Execution Layer"
-        I[pytest Process 1]
-        J[pytest Process 2]
-        K[pytest Process N]
+
+    subgraph "Supporting Services"
+        F1[Test Discovery<br/>Auto-scan + filter]
+        F2[Suite Manager<br/>Custom + auto suites]
+        F3[Upload Handler<br/>ZIP + dedup]
+        F4[CLI Executor<br/>Allowlisted commands]
+        F5[Setup/Teardown<br/>Pre/post hooks]
     end
-    
+
     subgraph "Data Layer"
-        L[(SQLite/PostgreSQL)]
-        L1[runs table]
-        L2[clients table]
-        L3[logs table]
-        L4[resources table]
-        L5[queue_entries table]
+        G[(PostgreSQL / SQLite<br/>16 tables)]
+        H[File Storage<br/>reports · uploads · scripts]
     end
-    
-    subgraph "File Storage"
-        M[Reports Directory]
-        M1[HTML Reports]
-        M2[JSON Reports]
-        M3[JUnit XML]
-        M4[Coverage Reports]
-        M5[Allure Results]
-    end
-    
-    A --> C
-    B --> D
-    
-    C --> D
+
+    A --> C1
+    B --> D1
+    B2 --> D1
+
     C1 --> D1
-    C2 --> D1
-    C3 --> D2
+    C2 --> D2
+    C3 --> D1
     C4 --> D1
-    
-    D --> E
-    D --> F
-    D --> G
-    D --> H
-    
-    E --> I
-    E --> J
-    E --> K
-    
-    I --> L
-    J --> L
-    K --> L
-    
-    E --> M
-    H --> M
-    
-    L --> L1
-    L --> L2
-    L --> L3
-    L --> L4
-    L --> L5
-    
-    M --> M1
-    M --> M2
-    M --> M3
-    M --> M4
-    M --> M5
-    
-    style C fill:#e1f5fe
-    style D fill:#f3e5f5
-    style E fill:#e8f5e8
-    style I fill:#fff3e0
-    style L fill:#fce4ec
-    style M fill:#f1f8e9
+    C5 --> D1
+
+    D1 --> E1
+    D1 --> E2
+    D1 --> E3
+    D1 --> E4
+    D1 --> F1
+    D1 --> F2
+    D1 --> F3
+    D1 --> F4
+    D1 --> F5
+    D1 --> E5
+
+    E1 --> G
+    E1 --> H
+    E2 --> G
+    E3 --> G
+    E3 --> H
+    E4 --> G
+    E5 --> G
+    E5 --> H
+    F3 --> H
+
+    style C1 fill:#e1f5fe
+    style C2 fill:#e1f5fe
+    style C3 fill:#e1f5fe
+    style C4 fill:#e1f5fe
+    style C5 fill:#e1f5fe
+    style D1 fill:#f3e5f5
+    style D2 fill:#f3e5f5
+    style D3 fill:#f3e5f5
+    style E1 fill:#fff3e0
+    style E2 fill:#fff3e0
+    style E3 fill:#fff3e0
+    style E4 fill:#fff3e0
+    style E5 fill:#fff3e0
+    style F1 fill:#e8f5e9
+    style F2 fill:#e8f5e9
+    style F3 fill:#e8f5e9
+    style F4 fill:#e8f5e9
+    style F5 fill:#e8f5e9
+    style G fill:#ede7f6
+    style H fill:#ede7f6
 ```
+
+> **Detailed architecture** with sequence diagrams: see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## Requirements
 
